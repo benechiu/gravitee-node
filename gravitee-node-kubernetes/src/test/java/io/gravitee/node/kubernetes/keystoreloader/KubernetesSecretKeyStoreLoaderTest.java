@@ -20,13 +20,14 @@ import static org.junit.Assert.*;
 
 import io.gravitee.common.util.KeyStoreUtils;
 import io.gravitee.kubernetes.client.KubernetesClient;
+import io.gravitee.kubernetes.client.api.ResourceQuery;
+import io.gravitee.kubernetes.client.api.WatchQuery;
 import io.gravitee.kubernetes.client.model.v1.ObjectMeta;
 import io.gravitee.kubernetes.client.model.v1.Secret;
 import io.gravitee.kubernetes.client.model.v1.SecretEvent;
 import io.gravitee.node.api.certificate.KeyStoreBundle;
 import io.gravitee.node.api.certificate.KeyStoreLoader;
 import io.gravitee.node.api.certificate.KeyStoreLoaderOptions;
-import io.reactivex.BackpressureStrategy;
 import io.reactivex.Flowable;
 import io.reactivex.Maybe;
 import java.io.File;
@@ -37,7 +38,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -86,8 +86,9 @@ public class KubernetesSecretKeyStoreLoaderTest {
     Mockito
       .when(
         kubernetesClient.get(
-          options.getKubernetesLocations().get(0),
-          Secret.class
+          ResourceQuery
+            .<Secret>from(options.getKubernetesLocations().get(0))
+            .build()
         )
       )
       .thenReturn(Maybe.just(secret));
@@ -130,7 +131,11 @@ public class KubernetesSecretKeyStoreLoaderTest {
     secret.setMetadata(metadata);
 
     Mockito
-      .when(kubernetesClient.get("/gio/secrets/my-tls-secret", Secret.class))
+      .when(
+        kubernetesClient.get(
+          ResourceQuery.<Secret>from("/gio/secrets/my-tls-secret").build()
+        )
+      )
       .thenReturn(Maybe.just(secret));
 
     AtomicReference<KeyStoreBundle> bundleRef = new AtomicReference<>(null);
@@ -161,7 +166,11 @@ public class KubernetesSecretKeyStoreLoaderTest {
     secret.setType(KUBERNETES_OPAQUE_SECRET);
 
     Mockito
-      .when(kubernetesClient.get("/gio/secrets/my-tls-secret", Secret.class))
+      .when(
+        kubernetesClient.get(
+          ResourceQuery.<Secret>from("/gio/secrets/my-tls-secret").build()
+        )
+      )
       .thenReturn(Maybe.just(secret));
 
     cut.start();
@@ -190,7 +199,11 @@ public class KubernetesSecretKeyStoreLoaderTest {
     secret.setMetadata(metadata);
 
     Mockito
-      .when(kubernetesClient.get("/gio/secrets/my-tls-secret", Secret.class))
+      .when(
+        kubernetesClient.get(
+          ResourceQuery.<Secret>from("/gio/secrets/my-tls-secret").build()
+        )
+      )
       .thenReturn(Maybe.just(secret));
 
     cut.start();
@@ -214,7 +227,11 @@ public class KubernetesSecretKeyStoreLoaderTest {
     secret.setType("Invalid");
 
     Mockito
-      .when(kubernetesClient.get("/gio/secrets/my-tls-secret", Secret.class))
+      .when(
+        kubernetesClient.get(
+          ResourceQuery.<Secret>from("/gio/secrets/my-tls-secret").build()
+        )
+      )
       .thenReturn(Maybe.just(secret));
 
     cut.start();
@@ -267,16 +284,18 @@ public class KubernetesSecretKeyStoreLoaderTest {
     Mockito
       .when(
         kubernetesClient.get(
-          options.getKubernetesLocations().get(0),
-          Secret.class
+          ResourceQuery
+            .<Secret>from(options.getKubernetesLocations().get(0))
+            .build()
         )
       )
       .thenReturn(Maybe.just(secret));
     Mockito
       .when(
         kubernetesClient.watch(
-          options.getKubernetesLocations().get(0),
-          SecretEvent.class
+          WatchQuery
+            .<Secret>from(options.getKubernetesLocations().get(0))
+            .build()
         )
       )
       .thenReturn(Flowable.just(modifiedSecretEvent));

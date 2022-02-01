@@ -16,9 +16,9 @@
 package io.gravitee.node.kubernetes.propertyresolver;
 
 import io.gravitee.kubernetes.client.KubernetesClient;
-import io.gravitee.kubernetes.client.model.v1.ConfigMapEvent;
-import io.gravitee.kubernetes.client.model.v1.KubernetesEventType;
-import io.gravitee.kubernetes.client.model.v1.SecretEvent;
+import io.gravitee.kubernetes.client.api.ResourceQuery;
+import io.gravitee.kubernetes.client.api.WatchQuery;
+import io.gravitee.kubernetes.client.model.v1.*;
 import io.reactivex.Flowable;
 import io.reactivex.Maybe;
 import java.util.Base64;
@@ -87,7 +87,12 @@ public class KubernetesPropertyResolver implements PropertyResolver {
 
     if ("secrets".equals(properties[1])) { // type
       return kubernetesClient
-        .watch(generateLocation(properties), SecretEvent.class)
+        .watch(
+          WatchQuery
+            .secret(properties[0], properties[2])
+            .resourceKey(properties[3])
+            .build()
+        )
         .filter(
           event ->
             event.getType().equals(KubernetesEventType.MODIFIED.name()) ||
@@ -104,7 +109,12 @@ public class KubernetesPropertyResolver implements PropertyResolver {
         );
     } else if ("configmaps".equals(properties[1])) {
       return kubernetesClient
-        .watch(generateLocation(properties), ConfigMapEvent.class)
+        .watch(
+          WatchQuery
+            .configMap(properties[0], properties[2])
+            .resourceKey(properties[3])
+            .build()
+        )
         .filter(
           event ->
             event.getType().equals(KubernetesEventType.MODIFIED.name()) ||
@@ -152,12 +162,15 @@ public class KubernetesPropertyResolver implements PropertyResolver {
   }
 
   private Maybe<String> resolvePropertyFromConfigMap(String location) {
+    ResourceQuery<ConfigMap> query = ResourceQuery
+      .<ConfigMap>from(location)
+      .build();
     return kubernetesClient
-      .get(location, String.class)
+      .get(query)
       .flatMap(
-        data -> {
-          if (data != null) {
-            return Maybe.just(data);
+        configMap -> {
+          if (configMap != null) {
+            return Maybe.just(configMap.getData().get(query.getResourceKey()));
           } else {
             LOGGER.warn("Key not found in this location [{}]", location);
             return Maybe.empty();
@@ -167,12 +180,13 @@ public class KubernetesPropertyResolver implements PropertyResolver {
   }
 
   private Maybe<String> resolvePropertyFromSecret(String location) {
+    ResourceQuery<Secret> query = ResourceQuery.<Secret>from(location).build();
     return kubernetesClient
-      .get(location, String.class)
+      .get(ResourceQuery.<Secret>from(location).build())
       .flatMap(
-        data -> {
-          if (data != null) {
-            return Maybe.just(data);
+        secret -> {
+          if (secret != null) {
+            return Maybe.just(secret.getData().get(query.getResourceKey()));
           } else {
             LOGGER.debug("Key not found in this location [{}]", location);
             return Maybe.empty();

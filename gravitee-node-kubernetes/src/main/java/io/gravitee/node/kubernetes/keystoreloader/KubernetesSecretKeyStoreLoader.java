@@ -17,9 +17,10 @@ package io.gravitee.node.kubernetes.keystoreloader;
 
 import io.gravitee.common.util.KeyStoreUtils;
 import io.gravitee.kubernetes.client.KubernetesClient;
-import io.gravitee.kubernetes.client.KubernetesClientV1Impl.KubernetesResource;
+import io.gravitee.kubernetes.client.api.ResourceQuery;
+import io.gravitee.kubernetes.client.api.WatchQuery;
+import io.gravitee.kubernetes.client.model.v1.Event;
 import io.gravitee.kubernetes.client.model.v1.Secret;
-import io.gravitee.kubernetes.client.model.v1.SecretEvent;
 import io.gravitee.node.api.certificate.KeyStoreLoader;
 import io.gravitee.node.api.certificate.KeyStoreLoaderOptions;
 import io.reactivex.Completable;
@@ -31,8 +32,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * @author Jeoffrey HAEYAERT (jeoffrey.haeyaert at graviteesource.com)
@@ -74,10 +73,13 @@ public class KubernetesSecretKeyStoreLoader
           if (matcher.matches()) {
             this.resources.put(
                 matcher.group(1),
-                new KubernetesResource(location)
+                ResourceQuery.<Secret>from(location).build()
               );
           } else {
-            this.resources.put(location, new KubernetesResource(location));
+            this.resources.put(
+                location,
+                ResourceQuery.<Secret>from(location).build()
+              );
           }
         }
       );
@@ -104,7 +106,7 @@ public class KubernetesSecretKeyStoreLoader
       .map(
         location ->
           kubernetesClient
-            .get(location, Secret.class)
+            .get(ResourceQuery.<Secret>from(location).build())
             .observeOn(Schedulers.computation())
             .flatMapCompletable(this::loadKeyStore)
       )
@@ -118,13 +120,13 @@ public class KubernetesSecretKeyStoreLoader
 
   @Override
   protected Flowable<Secret> watch() {
-    final List<Flowable<SecretEvent>> toWatch = resources
+    final List<Flowable<Event<Secret>>> toWatch = resources
       .keySet()
       .stream()
       .map(
         location ->
           kubernetesClient
-            .watch(location, SecretEvent.class)
+            .watch(WatchQuery.<Secret>from(location).build())
             .observeOn(Schedulers.computation())
             .repeat()
             .retryWhen(
@@ -136,7 +138,7 @@ public class KubernetesSecretKeyStoreLoader
     return Flowable
       .merge(toWatch)
       .filter(event -> event.getType().equalsIgnoreCase("MODIFIED"))
-      .map(SecretEvent::getObject);
+      .map(Event::getObject);
   }
 
   @Override
@@ -160,7 +162,7 @@ public class KubernetesSecretKeyStoreLoader
           )
         );
       } else {
-        final Optional<KubernetesResource> optResource = resources
+        final Optional<ResourceQuery<Secret>> optResource = resources
           .values()
           .stream()
           .filter(
@@ -170,9 +172,9 @@ public class KubernetesSecretKeyStoreLoader
                 .equalsIgnoreCase(secret.getMetadata().getNamespace()) &&
               (
                 secret.getType().equalsIgnoreCase(KUBERNETES_OPAQUE_SECRET) ||
-                r.getType().value().equalsIgnoreCase(secret.getType())
+                r.getType().getName().equalsIgnoreCase(secret.getType())
               ) &&
-              r.getName().equalsIgnoreCase(secret.getMetadata().getName())
+              r.getResource().equalsIgnoreCase(secret.getMetadata().getName())
           )
           .findFirst();
 
@@ -183,8 +185,8 @@ public class KubernetesSecretKeyStoreLoader
             )
           );
         } else if (
-          optResource.get().getKey() == null ||
-          optResource.get().getKey().isEmpty()
+          optResource.get().getResourceKey() == null ||
+          optResource.get().getResourceKey().isEmpty()
         ) {
           return Completable.error(
             new IllegalArgumentException(
@@ -196,7 +198,7 @@ public class KubernetesSecretKeyStoreLoader
         keyStore =
           KeyStoreUtils.initFromContent(
             options.getKeyStoreType(),
-            data.get(optResource.get().getKey()),
+            data.get(optResource.get().getResourceKey()),
             options.getKeyStorePassword()
           );
       }
